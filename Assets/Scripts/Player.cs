@@ -7,7 +7,21 @@ public class Player : NetworkBehaviour
 {
     // variable que nos controla si puede o no saltar
     private bool canJump = true;
+    // velocidad del player
     private float speed = 5f;
+    // multiplicador  de velocidad si se es bufado o debufado
+    private float buffDebuffSpeed = 1;
+    // variable para establecer corrutina
+    private IEnumerator coroutine;
+    // variable dle render para no buscarla con getcomponetn cada vez
+    private Renderer render;
+
+    private void Awake()
+    {
+        // se obteine el renderer
+        render = GetComponent<Renderer>();
+    }
+
     // hacemos que en el spawn tengan posicionamiento aleatorio dentro de un margen
     public override void OnNetworkSpawn()
     {
@@ -28,6 +42,31 @@ public class Player : NetworkBehaviour
         NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(serverRpcParams.Receive.SenderClientId).GetComponent<Rigidbody>().AddForce(force);
     }
 
+    [ClientRpc]
+    public void BuffDebuffClientRpc(float buffDebuffSpeed, float durationbuffDebuff, Color buffDebuffColor)
+    {
+        // se crea la corrutina y se llama
+        coroutine = BuffDebuffCoroutine(buffDebuffSpeed, durationbuffDebuff, buffDebuffColor);
+        StartCoroutine(coroutine);
+    }
+
+    private IEnumerator BuffDebuffCoroutine(float buffDebuffSpeed , float durationbuffDebuff, Color buffDebuffColor)
+    {
+        // se guarda el valor original del multiplicador de buffo/debuffo
+        float originalSpeedBuffDebuff = this.buffDebuffSpeed;
+        // se aplica el nuevo multiplicador
+        this.buffDebuffSpeed = buffDebuffSpeed;
+        // se guarda el color original del player
+        Color originalColor = render.material.color;
+        // se le asigna que su color es el asignado para el buffo o debuffo
+        render.material.color = buffDebuffColor;
+        // se duerme la corrutina durante el tiempo que va estar bufado/debufado
+        yield return new WaitForSeconds(durationbuffDebuff);
+        // se le devuelven sus parametros originales antes de terminar
+        this.buffDebuffSpeed = originalSpeedBuffDebuff;
+        render.material.color = originalColor;
+    }
+
     // metodo que genera una posicion aleatoria dentro de unos margenes
     static Vector3 GetRandomPositionOnPlane()
     {
@@ -40,12 +79,11 @@ public class Player : NetworkBehaviour
         if (IsOwner)
         {
             // se llama al server RPC para que efectue el movimiento dle personaje con los calculos ya hechos de speed y time.deltatime
-            MoveServerRpc(new Vector3(Input.GetAxis("Horizontal"), 0f, Input.GetAxis("Vertical")) * speed * Time.deltaTime);
+            MoveServerRpc(new Vector3(Input.GetAxis("Horizontal"), 0f, Input.GetAxis("Vertical")) * speed * buffDebuffSpeed * Time.deltaTime);
 
             // se obtiene si se pulso el imput del salto y si se puede saltar
             if (Input.GetButtonDown("Jump") && canJump)
             {
-                Debug.Log("Salta puto");
                 // se le añade una fuerza de salto en el eje y, un valor aceptable y se manda la llamada al serverRPC para que la efectue
                 JumpServerRpc(new Vector3(0, 330f, 0));
                 // se pone que no pueda saltar ya que lo acaba de hacer
